@@ -104,6 +104,30 @@ or user `keyboard-quit' during execution of body."
 	   (setq string-buffer (substring string-buffer (match-end 0))))
 	 (split-string string-buffer comint-prompt-regexp)))))
 
+(defun org-babel-visa-replace-vars (body vars)
+  "Expand BODY according to VARS.
+Variabes in the BODY need to be prefixed with '$' and followed by
+a space or newline."
+  (let ((old-body ""))
+    (mapc (lambda (pair)
+            (setq body (replace-regexp-in-string
+                        (format "\\$%s\\([ ]\\)\\|\\$%s$" (car pair)
+                                (car pair))
+                        (format "%s\\1" (cdr pair))
+                        body)))
+          vars)
+    body))
+
+(defun org-babel-expand-body:visa (body params)
+  "Expand BODY according to PARAMS, return the expanded body."
+  (let ((vars (org-babel--get-vars params))
+        (prologue (cdr (assq :prologue params)))
+        (epilogue (cdr (assq :epilogue params))))
+    (setq body (org-babel-visa-replace-vars body vars))
+    ;; add prologue/epilogue
+    (when prologue (setq body (concat prologue "\n" body)))
+    (when epilogue (setq body (concat body "\n" epilogue)))
+    body))
 
 (defun org-babel-execute:visa (body params)
   "Execute a block of VISA code with Babel.
@@ -114,6 +138,7 @@ This function is called by `org-babel-execute-src-block'."
                   (cdr (assq :session params))))
         (comint-prompt-regexp "^(visa\\|open) ")
         (eoe-string "org-babel-eoe")
+        (replaced-body (org-babel-expand-body:visa body params)))
     (mapconcat
      #'identity
      (butlast
@@ -125,7 +150,7 @@ This function is called by `org-babel-execute-src-block'."
              (session "(visa) *** Unknown syntax: org-babel-eoe" t)
            (mapc (lambda (line)
 	           (insert (org-babel-chomp line)) (comint-send-input nil t))
-	         (list body
+	         (list replaced-body
                        eoe-string))
            ) "\n") "[\r\n]+")) 2)
      "\n")))
